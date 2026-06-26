@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D Brochure</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0e0e0e;font-family:system-ui,sans-serif}
+
+#viewer{
+  position:absolute;inset:0;
+  left: 20%;
+  display:flex;justify-content:center;align-items:center;
+  perspective:3300px;
+}
+#camera{
+  transform-style:preserve-3d;
+}
+#brochure{width:900px;height:580px;position:relative;transform-style:preserve-3d}
+.panel{position:absolute;top:0;width:300px;height:580px;transform-style:preserve-3d}
+#left  {left:0;   transform-origin:right center}
+#center{left:300px}
+#right {left:600px;transform-origin:left center}
+.face{
+  position:absolute;inset:0;backface-visibility:hidden;
+  background:#1a1a1a;background-size:cover;background-position:center;
+  border:1px solid rgba(255,255,255,0.06);
+}
+.face.back{transform:rotateY(180deg)}
+
+/* ── HIT ZONES ── */
+#hit-left,#hit-right{position:absolute;cursor:ew-resize;z-index:5}
+
+/* ── HUD ── */
+#hud{
+  position:absolute;bottom:25%;left:5%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:12px;align-content:center;
+  background:#1c1c1c;border:1px solid #2e2e2e;border-radius:14px;
+  padding:18px 16px;z-index:10;
+  box-shadow:0 4px 24px rgba(0,0,0,0.5);
+  width:140px;
+  flex-direction: column;
+  justify-content: space-evenly;
+}
+
+/* open / close buttons */
+.hud-btn{
+  width: 100%;
+  background:none;border:1px solid #383838;color:#999;
+  padding:8px 14px;border-radius:8px;cursor:pointer;
+  font:12px system-ui;letter-spacing:.3px;white-space:nowrap;
+  transition:background .15s,color .15s,border-color .15s;
+}
+.hud-btn:hover{background:#2a2a2a;color:#ccc;border-color:#484848}
+.hud-btn:active{background:#333;color:#eee}
+.hud-btn:disabled{opacity: 0.3; cursor: not-allowed;}
+
+/* camera control / slider */
+.ctrl{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;margin-top:8px;}
+.ctrl-label{font-size:10px;color:#555;letter-spacing:.4px;text-transform:uppercase;white-space:nowrap;}
+
+input[type=range]{
+  -webkit-appearance:none;appearance:none;
+  width:100%;height:4px;border-radius:2px;
+  background:#2e2e2e;outline:none;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:#666;border:none;cursor:grab;transition:background .15s;
+}
+input[type=range]::-webkit-slider-thumb:active{background:#999;cursor:grabbing}
+
+/* zoom display */
+.zoom-pill{
+  font-size:11px;color:#555;background:#181818;
+  border:1px solid #2a2a2a;border-radius:6px;
+  padding:4px 9px;letter-spacing:.3px;
+  font-variant-numeric:tabular-nums;white-space:nowrap;cursor:pointer;
+  width: 100%; text-align: center;
+}
+.zoom-pill:hover{border-color:#3a3a3a; color:#777;}
+.zoom-pill span{color:#888}
+
+/* drag hints */
+#hint-left,#hint-right{
+  position:absolute;top:50%;transform:translateY(-50%);
+  color:rgba(255,255,255,0.1);font-size:26px;pointer-events:none;z-index:6;
+  transition:opacity .25s;
+}
+#hint-left{left:18px}
+#hint-right{right:18px}
+
+</style>
+</head>
+<body id="fullrequester">
+
+<div id="hit-left"></div>
+<div id="hit-right"></div>
+<div id="hint-left">‹ ›</div>
+<div id="hint-right">‹ ›</div>
+
+<div id="viewer">
+  <div id="camera">
+    <div id="brochure">
+      <div class="panel" id="left">
+        <div class="face"      id="inside0"></div>
+        <div class="face back" id="outside0"></div>
+      </div>
+      <div class="panel" id="center">
+        <div class="face"      id="inside1"></div>
+        <div class="face back" id="outside1"></div>
+      </div>
+      <div class="panel" id="right">
+        <div class="face"      id="inside2"></div>
+        <div class="face back" id="outside2"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="hud">
+  <button class="hud-btn" id="btnOpen">Open</button>
+  <button class="hud-btn" id="btnFlip" disabled>Flip</button>
+
+  <button class="hud-btn" id="btnFullScreen">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAb0lEQVR4nO3WQQqAMAwEwH1e390cxG/Eh0QEe5GWBm1RzA701uxeSglAESUAGwC7HHHMSmVOz8wurQwfJ98sLuVd5fIo7jxj8UPuPHE+JK/ReUT0YSuA5Y08C/dXW7hibawvMnv1SY3yPHvZo3/ZAaw4WC4400AxAAAAAElFTkSuQmCC" alt="full-screen--v1" style="vertical-align:middle;">
+  </button>
+
+  <div class="ctrl">
+    <span class="ctrl-label">Zoom</span>
+    <input type="range" id="zoomSlider" min="0.2" max="3.0" step="0.01" value="1.0">
+  </div>
+  
+  <div class="zoom-pill" id="zoomDisplay" title="Click to Reset"><span>100%</span></div>
+</div>
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// IMAGES — edit URLs or swap keys to reorder faces
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const FACES = {
+  inside0:  'https://i.ibb.co/bjm33hb9/inside0.png',
+  inside1:  'https://i.ibb.co/vCxsGdvS/inside1.png',
+  inside2:  'https://i.ibb.co/q3dddWtt/inside2.png',
+  outside0: 'https://i.ibb.co/Zzr42FLG/a001.png',
+  outside1: 'https://i.ibb.co/tVv4DDs/a000.png',
+  outside2: 'https://i.ibb.co/PZzcHgfD/a002.png',
+};
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Object.entries(FACES).forEach(([id,url])=>{
+  const el = document.getElementById(id);
+  if(el) el.style.backgroundImage=`url(${url})`;
+});
+
+const BROCHURE_W=900, BROCHURE_H=580, PAD=40;
+const PANEL_W=300, D2R=Math.PI/180;
+
+let camY=65, leftAng=90, rightAng=154;
+let baseScale=1, zoom=1; 
+let panX=0, panY=0; 
+let closed=true;
+
+const viewerEl = document.getElementById('viewer');
+const camEl    = document.getElementById('camera');
+const leftEl   = document.getElementById('left');
+const rightEl  = document.getElementById('right');
+const hitL     = document.getElementById('hit-left');
+const hitR     = document.getElementById('hit-right');
+const hintLeft = document.getElementById('hint-left');
+const hintRight= document.getElementById('hint-right');
+const zoomSlider = document.getElementById('zoomSlider');
+const zoomDisplay = document.getElementById('zoomDisplay');
+
+// ── SCALE + HIT ZONES ────────────────────────────────────────────────────────
+function updateLayout() {
+  const vw=window.innerWidth, vh=window.innerHeight;
+  baseScale=Math.min(1,(vw-PAD)/BROCHURE_W,(vh-PAD-80)/BROCHURE_H);
+  updateHitZones();
+  render();
+}
+function updateHitZones() {
+  const s=baseScale*zoom;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const bw=BROCHURE_W*s, bh=BROCHURE_H*s;
+  
+  const bl=(vw-bw)/2 + panX; 
+  const bt=(vh-bh)/2 + panY;
+  
+  hitL.style.cssText=`left:${bl}px;top:${bt}px;width:${bw/2}px;height:${bh}px`;
+  hitR.style.cssText=`left:${bl+bw/2}px;top:${bt}px;width:${bw/2}px;height:${bh}px`;
+}
+window.addEventListener('resize',updateLayout);
+
+// ── COLLISION ─────────────────────────────────────────────────────────────────
+function segmentsIntersect(ax,az,bx,bz,cx,cz,dx,dz){
+  const d1x=bx-ax,d1z=bz-az,d2x=dx-cx,d2z=dz-cz;
+  const cross=d1x*d2z-d1z*d2x;
+  if(Math.abs(cross)<1e-10)return false;
+  const ex=cx-ax,ez=cz-az;
+  const t=(ex*d2z-ez*d2x)/cross, u=(ex*d1z-ez*d1x)/cross;
+  return t>=0&&t<=1&&u>=0&&u<=1;
+}
+function wouldCollide(l,r){
+  const lx=300-PANEL_W*Math.cos(l*D2R), lz=PANEL_W*Math.sin(l*D2R);
+  const rx=600+PANEL_W*Math.cos(r*D2R), rz=PANEL_W*Math.sin(r*D2R);
+  return segmentsIntersect(300,0,lx,lz,600,0,rx,rz);
+}
+function trySet(nl,nr){
+  if(!wouldCollide(nl,nr)){leftAng=nl;rightAng=nr;return;}
+  if(!wouldCollide(nl,rightAng)){leftAng=nl;return;}
+  if(!wouldCollide(leftAng,nr)){rightAng=nr;return;}
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function render(){
+  const s=baseScale*zoom;
+  camEl.style.transform  =`translate(${panX}px, ${panY}px) scale(${s}) rotateY(${camY}deg)`;
+  leftEl.style.transform =`rotateY(${leftAng}deg)`;
+  rightEl.style.transform=`rotateY(${-rightAng}deg)`;
+  
+  zoomSlider.value = zoom;
+  zoomDisplay.innerHTML = `<span>${Math.round(zoom * 100)}%</span>`;
+}
+
+// ── FOCAL POINT MOUSE ZOOM ────────────────────────────────────────────────────
+const ZOOM_MIN=0.2, ZOOM_MAX=3;
+
+function handleFocalZoom(clientX, clientY, isZoomIn) {
+  const rect = viewerEl.getBoundingClientRect();
+  
+  // Calculate cursor offset relative to the center coordinates of the 3D viewer view space
+  const mouseX = clientX - (rect.left + rect.width / 2);
+  const mouseY = clientY - (rect.top + rect.height / 2);
+
+  const oldZoom = zoom;
+  const delta = isZoomIn ? 0.08 : -0.08;
+  const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, oldZoom + delta));
+
+  if (newZoom === oldZoom) return;
+
+  const factor = newZoom / oldZoom;
+  panX = mouseX - (mouseX - panX) * factor;
+  panY = mouseY - (mouseY - panY) * factor;
+  
+  zoom = newZoom;
+  updateHitZones();
+  render();
+}
+
+function resetZoomAndPan() {
+  zoom = 1.0;
+  panX = 0;
+  panY = 0;
+  updateHitZones();
+  render();
+}
+
+// Slider Control
+zoomSlider.addEventListener('input', (e) => {
+  zoom = parseFloat(e.target.value);
+  if (zoom === 1.0) { panX = 0; panY = 0; }
+  updateHitZones();
+  render();
+});
+
+zoomDisplay.addEventListener('click', resetZoomAndPan);
+
+// FIXED: Listen globally on window so hit zones don't block scroll event loops
+window.addEventListener('wheel', e => {
+  // Only intercept zoom if scrolling inside viewport canvas (ignoring HUD menu panel click targets)
+  if (e.target.closest('#hud')) return;
+  
+  e.preventDefault();
+  handleFocalZoom(e.clientX, e.clientY, e.deltaY < 0);
+}, {passive:false});
+
+// Pinch zoom mobile handlers on global view container
+window.addEventListener('touchstart', e => {
+  if (e.target.closest('#hud')) return;
+  if(e.touches.length === 2){
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchDist0 = Math.hypot(dx,dy);
+    zoom0 = zoom;
+  }
+}, {passive:true});
+
+window.addEventListener('touchmove', e => {
+  if (e.target.closest('#hud')) return;
+  if(pinchDist0 !== null && e.touches.length === 2){
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx,dy);
+    
+    const currentMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const currentMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    
+    const targetZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom0 * (dist / pinchDist0)));
+    handleFocalZoom(currentMidX, currentMidY, targetZoom > zoom);
+  }
+}, {passive:true});
+
+window.addEventListener('touchend', e => { if(e.touches.length < 2) pinchDist0 = null; });
+
+// ── ANIMATION ────────────────━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const rafL={id:null},rafR={id:null},rafD={id:null},rafZ={id:null};
+function animateTo(fromGetter,toVal,setter,ref){
+  cancelAnimationFrame(ref.id);
+  let start=null; const from=fromGetter(),dur=400;
+  (function step(ts){
+    if(!start)start=ts;
+    const t=Math.min((ts-start)/dur,1),e=t<0.5?2*t*t:-1+(4-2*t)*t;
+    setter(from+(toVal-from)*e); render();
+    if(t<1)ref.id=requestAnimationFrame(step);
+  })(performance.now());
+}
+
+document.getElementById('btnOpen').addEventListener('click',()=>{
+  closed=!closed;
+  panX = 0;
+  panY = 0;
+  if (closed){
+    document.getElementById('btnOpen').textContent = "Open";
+    animateTo(()=>camY, 65,v=>{camY=v;}, rafD);
+    animateTo(()=>zoom, 1,v=>{zoom=v; updateHitZones();}, rafZ);
+    animateTo(()=>leftAng, 90,v=>{trySet(v,rightAng);},rafL);
+    animateTo(()=>rightAng,154,v=>{trySet(leftAng,v);}, rafR);
+    document.getElementById('btnFlip').disabled=true;
+  } else {
+    document.getElementById('btnOpen').textContent = "Close";
+    animateTo(()=>camY, 0,v=>{camY=v;}, rafD);
+    animateTo(()=>zoom, 1,v=>{zoom=v; updateHitZones();}, rafZ);
+    animateTo(()=>leftAng, 0,v=>{leftAng=v;}, rafL);
+    animateTo(()=>rightAng,0,v=>{rightAng=v;},rafR);
+    document.getElementById('btnFlip').disabled=false;
+  }
+});
+document.getElementById('btnFullScreen').addEventListener('click',()=>{
+  if (document.fullscreenElement){
+    document.exitFullscreen();  
+  } else {
+    document.getElementById("fullrequester").requestFullscreen();
+  }
+});
+document.getElementById('btnFlip').addEventListener('click',()=>{
+  if(closed)return;
+  animateTo(()=>camY, (camY+180)%360,v=>{camY=v;}, rafD);
+});
+
+// ── PANEL DRAG ────────────────────────────────────────────────────────────────
+let dragging=null,lastX=0;
+function dragStart(side,x){
+  if (closed)return;
+  dragging=side;lastX=x;
+  cancelAnimationFrame(rafL.id);cancelAnimationFrame(rafR.id);
+  hintLeft.style.opacity =side==='left' ?'0.5':'0.1';
+  hintRight.style.opacity=side==='right'?'0.5':'0.1';
+}
+function dragMove(x){
+  if(!dragging)return;
+  const dx=(x-lastX)/(baseScale*zoom); lastX=x;
+  if(dragging==='left')  trySet(leftAng+dx*0.5,rightAng);
+  if(dragging==='right') trySet(leftAng,rightAng-dx*0.5);
+  render();
+}
+function dragEnd(){
+  dragging=null;
+  hintLeft.style.opacity=hintRight.style.opacity='0.1';
+}
+
+hitL.addEventListener('mousedown',e=>{dragStart('left', e.clientX);e.preventDefault();});
+hitR.addEventListener('mousedown',e=>{dragStart('right',e.clientX);e.preventDefault();});
+window.addEventListener('mousemove',e=>{if(dragging)dragMove(e.clientX);});
+window.addEventListener('mouseup',dragEnd);
+
+hitL.addEventListener('touchstart',e=>{
+  if(e.touches.length===1)dragStart('left',e.touches[0].clientX);
+},{passive:true});
+hitR.addEventListener('touchstart',e=>{
+  if(e.touches.length===1)dragStart('right',e.touches[0].clientX);
+},{passive:true});
+window.addEventListener('touchmove',e=>{
+  if(dragging&&e.touches.length===1)dragMove(e.touches[0].clientX);
+},{passive:true});
+window.addEventListener('touchend',dragEnd);
+
+updateLayout();
+</script>
+</body>
+</html>
